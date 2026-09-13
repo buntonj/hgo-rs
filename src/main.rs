@@ -193,13 +193,13 @@ fn main() {
     let mut observer = HighGainObserver::new(
         HighGainObserverParams {
             gains: ndarray::Array1::from_vec(vec![3.17, 2.5]),
-            epsilon: 0.08,
+            epsilon: 0.1,
         },
         TorqueSystemState::default(),
         start_time.clone(),
     );
 
-    for _ in 0..10 {
+    for _ in 0..100 {
         let end_time = current_time + hifitime::Duration::from_seconds(0.1);
         (state, output) = system.step(
             &state,
@@ -210,7 +210,7 @@ fn main() {
             end_time,
         );
         // Step the observer.
-        observer.step_to(output.timestamp(end_time), end_time);
+        observer.step_to(output.timestamp(end_time), torque_input, end_time);
         let current_estimate = observer.current_estimate();
         let current_estimate_state = current_estimate.as_state();
         current_time = end_time;

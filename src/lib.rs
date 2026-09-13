@@ -48,6 +48,7 @@ pub trait Vectorizable {
 ///
 ///
 pub trait Observer {
+    type Input;
     type Estimate;
     type Measurement;
 
@@ -55,7 +56,12 @@ pub trait Observer {
     ///
     /// Given a measurement with the provided timestep, produce a state estimate
     /// at the requested time.
-    fn step_to(&mut self, measurement: Timestamped<Self::Measurement>, time: hifitime::Epoch);
+    fn step_to(
+        &mut self,
+        measurement: Timestamped<Self::Measurement>,
+        input: Self::Input,
+        time: hifitime::Epoch,
+    );
 
     /// Extract the current estimate type.
     fn current_estimate(&self) -> Self::Estimate;
@@ -69,6 +75,8 @@ struct HighGainObserverState<T: Vectorizable + Clone> {
     vector: ndarray::Array1<Float>,
     /// The last received measurement.
     last_measurement: Option<HighGainObserverMeasurement>,
+    /// The current input (currently only single input).
+    input: Option<Float>,
     /// The current time.
     time: hifitime::Epoch,
     /// Phantom data representing the original state type.
@@ -81,6 +89,7 @@ impl<T: Vectorizable + Clone> HighGainObserverState<T> {
         Self {
             vector: state.vectorize(),
             last_measurement: None,
+            input: None,
             time,
             phantom: core::marker::PhantomData,
         }
@@ -154,7 +163,12 @@ impl<T: Vectorizable + Clone> HighGainObserver<T> {
                 // tracing::info!("Stepping state element {i} with gain {gain}, error {est_error}");
                 // Euler integration of the state. Last element doesn't integrate any extra state.
                 *element += timestep_seconds
-                    * (self.state.vector.get(i + 1).unwrap_or(&0.0) + gain * est_error);
+                    * (self
+                        .state
+                        .vector
+                        .get(i + 1)
+                        .unwrap_or(&self.state.input.unwrap_or(0.0))
+                        + gain * est_error);
             }
             new_state.time = to_time;
 
@@ -165,9 +179,18 @@ impl<T: Vectorizable + Clone> HighGainObserver<T> {
 
 impl<T: Vectorizable + Clone> Observer for HighGainObserver<T> {
     type Measurement = HighGainObserverMeasurement;
+    // Just single-input for now.
+    type Input = Float;
     type Estimate = HighGainObserverEstimate<T>;
 
-    fn step_to(&mut self, measurement: Timestamped<Self::Measurement>, time: hifitime::Epoch) {
+    fn step_to(
+        &mut self,
+        measurement: Timestamped<Self::Measurement>,
+        input: Self::Input,
+        time: hifitime::Epoch,
+    ) {
+        // Update the input state.
+        self.state.input = Some(input);
         // Propagate up to the measurement time
         self.propagate(measurement.time);
         // Update the measurement state

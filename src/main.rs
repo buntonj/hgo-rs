@@ -32,7 +32,6 @@ pub trait ControlSystem {
         Self: Sized,
     {
         let timestep_sec = (end_time - start_time).to_seconds();
-        tracing::info!("Stepping truth system {timestep_sec} s");
         let mut final_state = ndarray::Array::zeros([Self::State::size()]);
         // Define a ZOH system for the provided input.
         let system = ZOHSystem::<Self> { input, params };
@@ -176,10 +175,11 @@ fn main() {
         _measurement_noise_stddev: 0.1,
         _rng: <rand::rngs::SmallRng as rand::SeedableRng>::seed_from_u64(666),
     };
-    let state = TorqueSystemState {
+    let mut state = TorqueSystemState {
         position_rad: 0.0,
         angular_velocity_rad_per_s: 0.0,
     };
+    let mut output: <TorqueInputSystem as ControlSystem>::Output;
 
     let torque_input = 1.0;
 
@@ -192,16 +192,16 @@ fn main() {
 
     let mut observer = HighGainObserver::new(
         HighGainObserverParams {
-            gains: ndarray::Array1::from_vec(vec![2.5, 1.0]),
-            epsilon: 0.1,
+            gains: ndarray::Array1::from_vec(vec![3.17, 2.5]),
+            epsilon: 0.08,
         },
         TorqueSystemState::default(),
-        current_time,
+        start_time.clone(),
     );
 
-    for _ in 0..100 {
+    for _ in 0..10 {
         let end_time = current_time + hifitime::Duration::from_seconds(0.1);
-        let (state, output) = system.step(
+        (state, output) = system.step(
             &state,
             &params,
             &torque_input,
@@ -210,13 +210,18 @@ fn main() {
             end_time,
         );
         // Step the observer.
-        observer.step(output.timestamp(end_time), end_time);
+        observer.step_to(output.timestamp(end_time), end_time);
         let current_estimate = observer.current_estimate();
         let current_estimate_state = current_estimate.as_state();
         current_time = end_time;
         let elapsed_s = (current_time - start_time).to_seconds();
-        tracing::info!("T = {elapsed_s}:");
+        tracing::info!("T = {elapsed_s}s:");
         tracing::info!("Truth: {state:?}");
         tracing::info!("Estimate: {current_estimate_state:?}");
+
+        let error = TorqueSystemState::devectorize(
+            (state.vectorize() - current_estimate_state.vectorize()).view(),
+        );
+        tracing::info!("Error: {error:?}");
     }
 }

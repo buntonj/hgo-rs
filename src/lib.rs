@@ -55,7 +55,7 @@ pub trait Observer {
     ///
     /// Given a measurement with the provided timestep, produce a state estimate
     /// at the requested time.
-    fn step(&mut self, measurement: Timestamped<Self::Measurement>, predict_time: hifitime::Epoch);
+    fn step_to(&mut self, measurement: Timestamped<Self::Measurement>, time: hifitime::Epoch);
 
     /// Extract the current estimate type.
     fn current_estimate(&self) -> Self::Estimate;
@@ -167,13 +167,13 @@ impl<T: Vectorizable + Clone> Observer for HighGainObserver<T> {
     type Measurement = HighGainObserverMeasurement;
     type Estimate = HighGainObserverEstimate<T>;
 
-    fn step(&mut self, measurement: Timestamped<Self::Measurement>, predict_time: hifitime::Epoch) {
+    fn step_to(&mut self, measurement: Timestamped<Self::Measurement>, time: hifitime::Epoch) {
         // Propagate up to the measurement time
         self.propagate(measurement.time);
         // Update the measurement state
         self.state.last_measurement = Some(measurement.value);
         // Propagate to the desired time (will include error correction)
-        self.propagate(predict_time);
+        self.propagate(time);
     }
 
     /// Produce the estimate at the current time.

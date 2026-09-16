@@ -5,6 +5,9 @@ use high_gain_observer::{
     Float, HighGainObserver, HighGainObserverParams, Observer, Timestampable, Vectorizable,
 };
 
+/// Directory for output artifacts to get dumped.
+const ARTIFACT_DIR: &str = "./artifacts";
+
 /// System representing a spinning wheel that has torque inputs, e.g., a
 /// reaction wheel.
 struct TorqueInputSystem;
@@ -98,11 +101,15 @@ fn main() {
     let mut observer = HighGainObserver::new(
         HighGainObserverParams {
             gains: ndarray::Array1::from_vec(vec![2.0, 1.0]),
-            epsilon: 0.5,
+            epsilon: 1.0,
         },
         &TorqueSystemState::default(),
         start_time,
     );
+
+    let mut times = Vec::new();
+    let mut truth_states = Vec::new();
+    let mut estimate_states = Vec::new();
 
     for _ in 0..100 {
         let end_time = current_time + hifitime::Duration::from_seconds(0.1);
@@ -114,17 +121,7 @@ fn main() {
             current_time,
             end_time,
         );
-        current_time = end_time;
         let measurement_time = end_time;
-        let end_time = current_time + hifitime::Duration::from_seconds(0.1);
-        (state, _) = system.step(
-            &state,
-            &params,
-            &torque_input,
-            &mut integrator,
-            current_time,
-            end_time,
-        );
         // Step the observer.
         observer.step_to(output.timestamp(measurement_time), torque_input, end_time);
         let current_estimate = observer.current_estimate();
@@ -135,9 +132,28 @@ fn main() {
         tracing::info!("Truth: {state:?}");
         tracing::info!("Estimate: {current_estimate_state:?}");
 
+        times.push((current_time - start_time).to_seconds());
+        truth_states.push(state.clone());
+        estimate_states.push(current_estimate_state.clone());
+
         let error = TorqueSystemState::devectorize(
             (state.vectorize() - current_estimate_state.vectorize()).view(),
         );
         tracing::info!("Error: {error:?}");
     }
+
+    let mut plot = plotly::Plot::new();
+    plot.add_trace(
+        plotly::Scatter::new(
+            times.clone(),
+            truth_states
+                .iter()
+                .zip(estimate_states)
+                .map(|(truth, estimate)| truth.position_rad - estimate.position_rad)
+                .collect(),
+        )
+        .name("Position estimate error"),
+    );
+    std::fs::create_dir_all(ARTIFACT_DIR).unwrap();
+    plot.write_html(format!("{ARTIFACT_DIR}/out.html"));
 }

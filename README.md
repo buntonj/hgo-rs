@@ -3,16 +3,22 @@ Casual exploration of the implementation of high-gain observers in Rust. **Buyer
 
 High-gain observers are a parameterized family of state estimators for a fairly general class of nonlinear systems. For now, I've lazily only handled systems of the form:
 
-$$ \dot{x}_i = x_{i+1}, \\
-\dot{x}_n = \phi(x,u(t)), \\
-y(t) = x_1. $$
+$$
+\begin{aligned}
+\dot{x}_i &= x_{i+1}, \\
+\dot{x}_n &= \phi(x,u(t)), \\
+y(t) &= x_1(t).
+\end{aligned} $$
 
 Here $x \in\mathbb{R}^n$ represents the system "state", $u(t) \in\mathbb{R}^m$ represents a control input, $\phi: \mathbb{R}^n \times \mathbb{R}^m \to\mathbb{R}$ is some nonlinear relationship between the control input and the dynamics, and $y(t)\in\mathbb{R}$ is an output.  High-gain observers can be modified to handle far more general classes of systems than this, but one thing at a time!
 
 A basic high-gain observer for the above system takes the form:
 
-$$ \dot{\hat{x}}_i = x_{i+1} - \frac{\alpha_i}{\varepsilon^i}(y-x_1), \quad i = 1, 2,...,n-1 \\
-\dot{\hat{x}}_n = \hat{\phi}(\hat{x}, u) + \frac{\alpha_n}{\varepsilon^n}(y-x_1)$$
+$$ 
+\begin{aligned}
+\dot{\hat{x}}_i &= x_{i+1} - \frac{\alpha_i}{\varepsilon^i}(y-x_1), \quad i = 1, 2,...,n-1 \\
+\dot{\hat{x}}_n &= \hat{\phi}(\hat{x}, u) + \frac{\alpha_n}{\varepsilon^n}(y-x_1)
+\end{aligned}$$
 
 Here $\hat{x}\in\mathbb{R}^n$ is our state _estimate_, and $\hat{\phi}$ is some "nominal" nonlinearity model that we leverage. Both $\alpha\in\mathbb{R}^n$ and $\varepsilon\in\mathbb{R}_{>0}$ are parameters to tweak for observer convergence--typically one chooses $\alpha$ such that the roots of the characteristic polynomial:
 
@@ -25,7 +31,6 @@ For simplicity, I elected to let $\phi(x, u) = 0$ in this implementation, but of
 ## What's still left
 
 Some things to play with:
-* Split off the utilities I added for just "general control systems integrators" (`ControlSystem` trait, for exammple) so examples can be more lean.
 * Handle more general dynamics than a chain of integrators for the provided observer:
     * There can be a $\psi_i(x_1,...,x_i)$ additive nonlinearity that must be known and shared with the observer.
     * Multi-output is just "make N copies of the observer" IIRC, so we could just auto-do that.
@@ -34,7 +39,6 @@ Some things to play with:
 * Various references have added tricks to reduce the gain of these observers:
     * Khalil's book has a simple trick to reduce dimensionality by one.
     * Astolfi has a paper on reducing the gain powers by half with some sneaky state duplication.
-* Add better visualization tools (just looking at terminal tracing outputs _sucks_)
 * More examples!!
 * Add some utilities to help design the observer:
     * Simple pole placement with all eigenvalues at the same number (due to structure, this is easy and doesn't require general pole placement algorithms, or we could do Lyapunov/

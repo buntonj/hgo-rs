@@ -85,7 +85,7 @@ struct HighGainObserverState<T: Vectorizable + Clone> {
 
 impl<T: Vectorizable + Clone> HighGainObserverState<T> {
     /// Create a new `HighGainObserverState` from the given `Vectorizable` state.
-    pub fn new(state: T, time: hifitime::Epoch) -> Self {
+    pub fn new(state: &T, time: hifitime::Epoch) -> Self {
         Self {
             vector: state.vectorize(),
             last_measurement: None,
@@ -108,11 +108,13 @@ pub struct HighGainObserverEstimate<T: Vectorizable> {
 
 impl<T: Vectorizable> HighGainObserverEstimate<T> {
     /// Convert the current estimate into the state struct.
+    #[must_use]
     pub fn as_state(&self) -> T {
         T::devectorize(self.vector.view())
     }
 
     /// Return the state struct and timestamp for the estimate.
+    #[must_use]
     pub fn into_timestamped_state(&self) -> Timestamped<T> {
         let time = self.time;
         self.as_state().timestamp(time)
@@ -121,7 +123,7 @@ impl<T: Vectorizable> HighGainObserverEstimate<T> {
 
 /// Parameters of the observer.
 pub struct HighGainObserverParams {
-    /// Array of gains (h_i in the Khalil reference).
+    /// Array of gains (`h_i` in the Khalil reference).
     pub gains: ndarray::Array1<Float>,
     /// The "sufficiently small" value to crank gains.
     pub epsilon: Float,
@@ -137,16 +139,21 @@ pub struct HighGainObserver<T: Vectorizable + Clone> {
 
 impl<T: Vectorizable + Clone> HighGainObserver<T> {
     /// Create a new observer with the given parameters and initial state.
-    pub fn new(params: HighGainObserverParams, state: T, time: Time) -> Self {
+    pub fn new(params: HighGainObserverParams, state: &T, time: Time) -> Self {
         Self {
             state: HighGainObserverState::new(state, time),
-            params: params,
+            params,
         }
     }
 
     // TODO: Add some form of `with_poles_at` hook to do automatic pole placement.
 
     /// Propagate the state forward using forward-Euler, with no new measurement.
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_possible_wrap,
+        reason = "Should never run this observer with over i32 number of states"
+    )]
     pub fn propagate(&mut self, to_time: hifitime::Epoch) {
         let timestep_seconds = (to_time - self.state.time).to_seconds();
         // Only do math if we are stepping in time.
